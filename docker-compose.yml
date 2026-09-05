@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gridpulse}
       POSTGRES_DB: ${POSTGRES_DB:-gridpulse}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - gridpulse-pgdata:/var/lib/postgresql/data
       - ./infra/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -23,7 +23,7 @@ services:
     container_name: gridpulse-adminer
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8081:8080"
     depends_on:
       - postgres
 
