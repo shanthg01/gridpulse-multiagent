@@ -8,4 +8,6 @@ node_modules/
 *.pdf
 data/raw/
 data/cache/
+data/synthetic/
 .DS_Store
+eval/results/
