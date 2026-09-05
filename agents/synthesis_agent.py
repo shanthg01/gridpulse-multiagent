@@ -34,7 +34,7 @@ def synthesize(query: str, rag_result: dict | None, ts_result: dict | None) -> d
         system=SYSTEM_PROMPT,
         user_prompt=user_prompt,
         model=AGENT_MODEL,
-        max_tokens=1024,
+        max_tokens=2048,
     )
     return {
         "answer": result.text,

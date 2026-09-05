@@ -19,15 +19,18 @@ Given a user question, decide which tool(s) are needed to answer it:
 Many questions need both (e.g. "compare X's interconnection rules to Y's,
 and what was Z's generation trend last month" -> both true).
 
-Also extract an ISO/BA code if the question clearly targets one
-(PJM, CISO/CAISO, ERCO/ERCOT, MISO), else null."""
+Also extract the ISO name if the question clearly targets ONE for the
+document search (this must match how documents are tagged: PJM, CAISO,
+MISO, or ERCOT -- not EIA balancing-authority codes like CISO/ERCO), else
+null. If the question compares two ISOs, leave this null (don't filter out
+either one's documents)."""
 
 CLASSIFY_SCHEMA = {
     "type": "object",
     "properties": {
         "needs_rag": {"type": "boolean"},
         "needs_timeseries": {"type": "boolean"},
-        "iso": {"type": ["string", "null"], "description": "BA code, e.g. PJM, CISO, ERCO, MISO, or null"},
+        "iso": {"type": ["string", "null"], "description": "PJM, CAISO, MISO, or ERCOT (matches documents.iso), or null"},
         "reasoning": {"type": "string"},
     },
     "required": ["needs_rag", "needs_timeseries", "reasoning"],

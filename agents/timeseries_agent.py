@@ -26,7 +26,29 @@ DATABASE_URL = os.environ.get(
 
 KNOWN_BAS = ["PJM", "CISO", "ERCO", "MISO"]
 
-EXTRACT_SYSTEM_PROMPT = f"""Extract structured parameters for an EIA grid
+
+def _data_asof() -> str:
+    """Reference date for resolving relative phrases ("last July") -- the
+    most recent timestamp actually in eia_series, NOT the system clock.
+    EIA's live API lags real-world time and this dev box's clock has been
+    observed skewed ahead of it, so date.today() can resolve "last July"
+    into a period with no ingested data. Anchoring to the data itself keeps
+    relative-date queries answerable regardless of either clock.
+    """
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT max(ts) FROM eia_series")
+            row = cur.fetchone()
+            if row and row[0]:
+                return row[0].date().isoformat()
+    finally:
+        conn.close()
+    return date.today().isoformat()
+
+
+def _extract_system_prompt() -> str:
+    return f"""Extract structured parameters for an EIA grid
 generation-mix query. Known balancing authorities in the database: {', '.join(KNOWN_BAS)}
 (CAISO -> CISO, ERCOT -> ERCO). If the question names an ISO not in this
 list, still return it uppercased -- the query will simply return no data.
@@ -35,7 +57,8 @@ metric must be one of: "trend" (time series), "total" (sum over range),
 "average" (mean over range), "share" (fuel mix as % of total).
 
 Dates: if the question says a relative period like "last July", resolve it
-to explicit dates using {date.today().isoformat()} as today's date."""
+using {_data_asof()} as the reference "today" (this is the latest date with
+ingested data, not necessarily the real calendar date)."""
 
 EXTRACT_SCHEMA = {
     "type": "object",
@@ -52,7 +75,7 @@ EXTRACT_SCHEMA = {
 
 def _extract_params(query: str) -> tuple[dict, LLMResult]:
     result = call_claude(
-        system=EXTRACT_SYSTEM_PROMPT,
+        system=_extract_system_prompt(),
         user_prompt=query,
         model=ROUTER_MODEL,
         max_tokens=300,
@@ -62,27 +85,31 @@ def _extract_params(query: str) -> tuple[dict, LLMResult]:
 
 
 def _query_series(params: dict) -> pd.DataFrame:
+    # Manual fetch instead of pd.read_sql(conn=psycopg2 connection) -- pandas
+    # only officially supports SQLAlchemy/sqlite3 connections and warns on
+    # a raw DBAPI2 connection like this one.
     conn = psycopg2.connect(DATABASE_URL)
     try:
-        sql = """
-            SELECT ts, fuel_type, mwh
-            FROM eia_series
-            WHERE ba_code = %(ba_code)s
-              AND ts >= %(start_date)s
-              AND ts < (%(end_date)s::date + interval '1 day')
-              AND (%(fuel_type)s IS NULL OR fuel_type = %(fuel_type)s)
-            ORDER BY ts
-        """
-        return pd.read_sql(
-            sql,
-            conn,
-            params={
-                "ba_code": params.get("ba_code"),
-                "start_date": params.get("start_date"),
-                "end_date": params.get("end_date"),
-                "fuel_type": params.get("fuel_type"),
-            },
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ts, fuel_type, mwh
+                FROM eia_series
+                WHERE ba_code = %(ba_code)s
+                  AND ts >= %(start_date)s
+                  AND ts < (%(end_date)s::date + interval '1 day')
+                  AND (%(fuel_type)s IS NULL OR fuel_type = %(fuel_type)s)
+                ORDER BY ts
+                """,
+                {
+                    "ba_code": params.get("ba_code"),
+                    "start_date": params.get("start_date"),
+                    "end_date": params.get("end_date"),
+                    "fuel_type": params.get("fuel_type"),
+                },
+            )
+            rows = cur.fetchall()
+        return pd.DataFrame(rows, columns=["ts", "fuel_type", "mwh"])
     finally:
         conn.close()
 

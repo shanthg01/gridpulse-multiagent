@@ -51,7 +51,7 @@ def run_rag(query: str, iso: str | None = None, top_k: int = 6) -> dict:
         system=SYSTEM_PROMPT,
         user_prompt=user_prompt,
         model=AGENT_MODEL,
-        max_tokens=1024,
+        max_tokens=1536,
     )
 
     avg_score = sum(h["rrf_score"] for h in hits) / len(hits)
