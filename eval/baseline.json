@@ -1,0 +1,13 @@
+{
+  "n_items": 19,
+  "tool_selection_accuracy": 1.0,
+  "citation_correctness": 1.0,
+  "retrieval_precision_at_k": 0.8333,
+  "timeseries_ba_match_rate": 1.0,
+  "timeseries_value_in_range_rate": 1.0,
+  "overall_accuracy": 1.0,
+  "avg_tokens_per_query": 5889.2,
+  "avg_latency_ms_per_query": 11092.4,
+  "total_tokens": 111894,
+  "total_latency_ms": 210755
+}

@@ -1,0 +1,185 @@
+{
+  "_meta": {
+    "description": "Hand-curated golden Q/A set for the GridPulse agent pipeline eval harness (PLAN.md Phase 5). Every item is grounded in the actual ingested corpus (documents/chunks tables) and actual eia_series data (BA codes PJM, CISO, ERCO, MISO; hourly generation-mix data spanning 2025-06-01 through 2025-09-04 -- this machine's OS clock reads ~1yr ahead of that horizon, so all timeseries golden items anchor date ranges inside 2025-06..2025-09, never to 'today').",
+    "iso_vocab_note": "documents.iso and the router's extracted `iso` field use PJM/CAISO/MISO/ERCOT. eia_series.ba_code uses EIA's own codes: PJM, CISO (CAISO), ERCO (ERCOT), MISO. expected_document_ids/expected_iso use the documents vocab; expected_ba_code uses the eia_series vocab. Don't confuse the two.",
+    "expected_value_range_note": "Ranges for timeseries items were computed directly from eia_series via SQL (see eval/trajectory_eval.py comments), then widened generously to absorb the extracting LLM picking a slightly different but reasonable date boundary (e.g. 'through September' vs 'through Sep 4') -- they check the agent's arithmetic/data access is sane, not exact date-boundary matching."
+  },
+  "items": [
+    {
+      "id": "rag-pjm-14g-cluster",
+      "question": "According to PJM's interconnection manual, what happens after PJM receives a valid Generation Interconnection Request -- what study process does it go through?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": "PJM",
+      "expected_document_ids": [15]
+    },
+    {
+      "id": "rag-pjm-14c-facilities",
+      "question": "Per PJM Manual 14C, who is responsible for constructing network upgrades and interconnection facilities needed for a generator to connect to the PJM transmission system?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": "PJM",
+      "expected_document_ids": [16]
+    },
+    {
+      "id": "rag-caiso-gidap",
+      "question": "Under CAISO's GIDAP business practice manual, how is deliverability allocated to generating projects in the interconnection queue?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": "CAISO",
+      "expected_document_ids": [17]
+    },
+    {
+      "id": "rag-caiso-genmgmt",
+      "question": "According to CAISO's Generator Management BPM, what happens to a participating generator's negotiated bid components after it submits a retirement notice?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": "CAISO",
+      "expected_document_ids": [18]
+    },
+    {
+      "id": "rag-caiso-curtailment-july",
+      "question": "What did CAISO's wind and solar curtailment reports from mid-to-late July 2024 say about why renewable generation was being curtailed?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": "CAISO",
+      "expected_document_ids": [19, 20, 21]
+    },
+    {
+      "id": "rag-miso-bpm015",
+      "question": "What does MISO's BPM-015 say about its generator interconnection queue reform, specifically the Generating Facility Replacement Process?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": "MISO",
+      "expected_document_ids": [22]
+    },
+    {
+      "id": "rag-ercot-planning-guide",
+      "question": "What does Section 5 of the ERCOT Planning Guide require for a Generation Interconnection or Modification request?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": "ERCOT",
+      "expected_document_ids": [23]
+    },
+    {
+      "id": "rag-ferc-2023",
+      "question": "What did FERC Order No. 2023 change about generator interconnection queue processing, e.g. the first-ready, first-served cluster study approach?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": null,
+      "expected_document_ids": [13]
+    },
+    {
+      "id": "rag-ferc-2023a-summary",
+      "question": "What does the Troutman Pepper summary of FERC Order 2023-A say was clarified or modified relative to the original Order 2023?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": null,
+      "expected_document_ids": [14]
+    },
+    {
+      "id": "rag-lbnl-queued-up",
+      "question": "According to LBNL's Queued Up 2024 report, how did FERC Order 2023 relate to the interconnection reforms RTOs have been pursuing?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": null,
+      "expected_document_ids": [24]
+    },
+    {
+      "id": "rag-compare-pjm-caiso",
+      "question": "Compare how PJM and CAISO each handle generator interconnection: what does PJM's Manual 14G study process look like versus CAISO's GIDAP deliverability allocation procedures?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": null,
+      "expected_document_ids": [15, 17]
+    },
+    {
+      "id": "rag-compare-miso-ercot",
+      "question": "How does MISO's generator interconnection queue reform (BPM-015) compare to ERCOT's generator interconnection process in its Planning Guide?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": false,
+      "expected_iso": null,
+      "expected_document_ids": [22, 23]
+    },
+    {
+      "id": "ts-pjm-natgas-total",
+      "question": "What was PJM's total natural gas generation between June 1, 2025 and September 4, 2025?",
+      "expected_needs_rag": false,
+      "expected_needs_timeseries": true,
+      "expected_ba_code": "PJM",
+      "expected_fuel_type": "Natural Gas",
+      "expected_metric": "total",
+      "expected_value_range": [90000000, 140000000],
+      "expected_value_note": "actual SQL sum over full ingested range (2025-06-01..2025-09-04) is 114,639,244 MWh"
+    },
+    {
+      "id": "ts-caiso-solar-trend",
+      "question": "What has CAISO's solar generation trend looked like from June through September 2025?",
+      "expected_needs_rag": false,
+      "expected_needs_timeseries": true,
+      "expected_ba_code": "CISO",
+      "expected_fuel_type": "Solar",
+      "expected_metric": "trend",
+      "expected_value_range": [0, 20000],
+      "expected_value_note": "actual hourly values over full range span -65 to 18912 MWh, mean ~7671 MWh; range checks the per-hour stats (min/max/mean), not a total"
+    },
+    {
+      "id": "ts-ercot-fuel-mix-august",
+      "question": "What was ERCOT's fuel mix breakdown (share of generation by fuel type) for August 2025?",
+      "expected_needs_rag": false,
+      "expected_needs_timeseries": true,
+      "expected_ba_code": "ERCO",
+      "expected_fuel_type": null,
+      "expected_metric": "share",
+      "expected_top_fuel": "Natural Gas",
+      "expected_top_fuel_share_range": [40, 60],
+      "expected_value_note": "actual SQL: Natural Gas 50.4% of Aug-2025 ERCO generation, Solar 15.0%, Wind 14.4%, Coal 12.8%"
+    },
+    {
+      "id": "ts-miso-coal-average",
+      "question": "What was MISO's average hourly coal generation output in July 2025?",
+      "expected_needs_rag": false,
+      "expected_needs_timeseries": true,
+      "expected_ba_code": "MISO",
+      "expected_fuel_type": "Coal",
+      "expected_metric": "average",
+      "expected_value_range": [15000, 35000],
+      "expected_value_note": "actual SQL avg over July 2025 is ~27,228 MWh/hr"
+    },
+    {
+      "id": "ts-pjm-wind-total",
+      "question": "What was PJM's total wind generation from June 1 to September 4, 2025?",
+      "expected_needs_rag": false,
+      "expected_needs_timeseries": true,
+      "expected_ba_code": "PJM",
+      "expected_fuel_type": "Wind",
+      "expected_metric": "total",
+      "expected_value_range": [3000000, 6000000],
+      "expected_value_note": "actual SQL sum over full ingested range is 4,111,787 MWh"
+    },
+    {
+      "id": "hybrid-pjm-caiso-flagship",
+      "question": "Compare PJM's and CAISO's interconnection rules for new generators, and separately, what has CAISO's solar generation trend looked like recently (June-September 2025)?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": true,
+      "expected_iso": null,
+      "expected_document_ids": [15, 17],
+      "expected_ba_code": "CISO",
+      "expected_fuel_type": "Solar",
+      "expected_metric": "trend"
+    },
+    {
+      "id": "hybrid-miso-queue-and-generation",
+      "question": "What does MISO's BPM-015 interconnection queue reform involve, and what was MISO's total coal generation between June 1 and September 4, 2025?",
+      "expected_needs_rag": true,
+      "expected_needs_timeseries": true,
+      "expected_iso": "MISO",
+      "expected_document_ids": [22],
+      "expected_ba_code": "MISO",
+      "expected_fuel_type": "Coal",
+      "expected_metric": "total",
+      "expected_value_range": [40000000, 70000000],
+      "expected_value_note": "actual SQL sum over full ingested range is 56,052,528 MWh"
+    }
+  ]
+}
