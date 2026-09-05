@@ -2,3 +2,5 @@ python-dotenv
 requests
 psycopg2-binary
 pandas
+pymupdf
+sentence-transformers

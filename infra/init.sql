@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS documents (
     source_type   TEXT NOT NULL CHECK (source_type IN ('ferc', 'iso_manual', 'decarb_report')),
     iso           TEXT,
     title         TEXT,
-    url           TEXT,
+    url           TEXT UNIQUE,
     fetched_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     page          INT,
     bbox          JSONB,
     text          TEXT NOT NULL,
-    embedding     vector(1536),
+    embedding     vector(768),  -- BAAI/bge-base-en-v1.5 dim; change if swapping embed model
     tsv           tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -155,15 +155,15 @@ def _upsert_document(conn, spec: DocSpec) -> int:
             """
             INSERT INTO documents (source_type, iso, title, url)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT (url) DO UPDATE
+                SET source_type = EXCLUDED.source_type,
+                    iso = EXCLUDED.iso,
+                    title = EXCLUDED.title
             RETURNING id
             """,
             (spec.source_type, spec.iso, spec.title, spec.url),
         )
         row = cur.fetchone()
-        if row is None:
-            cur.execute("SELECT id FROM documents WHERE url = %s", (spec.url,))
-            row = cur.fetchone()
         conn.commit()
         return row[0]
 
