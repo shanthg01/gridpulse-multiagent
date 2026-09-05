@@ -1,37 +1,72 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { postQuery } from "./lib/api";
-import type { QueryResponse } from "./lib/types";
+import { useEffect, useState, type FormEvent } from "react";
+import { getStatus, submitQuery } from "./lib/api";
+import type { QueryResponse, StatusStep } from "./lib/types";
 import { AnswerWithCitations } from "./components/AnswerWithCitations";
 import { ChartPanel } from "./components/ChartPanel";
 import { CitationPanel } from "./components/CitationPanel";
+import { ProgressStepper } from "./components/ProgressStepper";
 import { TracePanel } from "./components/TracePanel";
 
 const EXAMPLE_QUERY =
   "How do PJM's interconnection queue rules compare to CAISO's for solar-plus-storage projects, and what was CAISO's solar generation trend last July?";
 
+const POLL_INTERVAL_MS = 1200;
+
 export default function Home() {
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const [statusSteps, setStatusSteps] = useState<StatusStep[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [activeMarker, setActiveMarker] = useState<string | null>(null);
 
+  // /query hands back a run_id immediately (the graph itself runs as a
+  // background task, ~15-30s) -- poll /status/{run_id} until it flips
+  // done=true, updating the stepper's `statusSteps` along the way.
+  useEffect(() => {
+    if (!runId || !running) return;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const status = await getStatus(runId);
+        if (cancelled) return;
+        setStatusSteps(status.steps);
+        if (status.done) {
+          setResult(status.result);
+          setRunning(false);
+          clearInterval(interval);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setRunning(false);
+        clearInterval(interval);
+      }
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [runId, running]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!query.trim() || loading) return;
-    setLoading(true);
+    if (!query.trim() || running) return;
     setError(null);
     setActiveMarker(null);
+    setResult(null);
+    setStatusSteps([]);
+    setRunId(null);
+    setRunning(true);
     try {
-      const res = await postQuery(query);
-      setResult(res);
+      const { run_id } = await submitQuery(query);
+      setRunId(run_id); // triggers the polling effect above
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      setResult(null);
-    } finally {
-      setLoading(false);
+      setRunning(false);
     }
   }
 
@@ -62,19 +97,14 @@ export default function Home() {
           />
           <button
             type="submit"
-            disabled={loading || !query.trim()}
+            disabled={running || !query.trim()}
             className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Running agents…" : "Ask"}
+            {running ? "Running agents…" : "Ask"}
           </button>
         </form>
 
-        {loading && (
-          <p className="text-sm text-zinc-500">
-            Router &rarr; RAG/timeseries agents &rarr; synthesis is running (several
-            sequential Claude calls) &mdash; this typically takes 15&ndash;30s.
-          </p>
-        )}
+        {running && !result && <ProgressStepper steps={statusSteps} />}
 
         {error && (
           <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">

@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     run_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     query         TEXT NOT NULL,
     started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    final_answer  TEXT
+    final_answer  TEXT,
+    result_json   JSONB  -- full {answer, citations, chart_spec}; NULL while the run is still in flight
 );
 
 CREATE TABLE IF NOT EXISTS agent_steps (

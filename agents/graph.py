@@ -11,6 +11,7 @@ this is the entire trajectory tracer data source, no separate tracing infra.
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from typing import Any, TypedDict
@@ -130,8 +131,12 @@ def _get_graph():
     return _GRAPH
 
 
-def run_query(query: str) -> dict:
-    """Entry point. Returns {run_id, answer, citations, chart_spec}."""
+def create_run(query: str) -> str:
+    """Inserts the agent_runs row and returns run_id, without executing the
+    graph. Lets a caller (e.g. the API) hand back run_id immediately and run
+    execute_run() in the background, so a client can poll progress via
+    agent_steps while the graph is still working.
+    """
     run_id = str(uuid.uuid4())
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -141,7 +146,18 @@ def run_query(query: str) -> dict:
                 (run_id, query),
             )
         conn.commit()
+    finally:
+        conn.close()
+    return run_id
 
+
+def execute_run(run_id: str, query: str) -> dict:
+    """Runs the graph for an already-created run_id, persists the full
+    result to agent_runs.result_json (this is what flips a poller's "done"
+    check), and returns {run_id, answer, citations, chart_spec}.
+    """
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
         initial_state: GraphState = {
             "query": query,
             "run_id": run_id,
@@ -151,26 +167,36 @@ def run_query(query: str) -> dict:
         final_state = _get_graph().invoke(initial_state)
         final = final_state.get("final") or {}
 
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE agent_runs SET final_answer = %s WHERE run_id = %s",
-                (final.get("answer", ""), run_id),
-            )
-        conn.commit()
-
-        return {
+        result = {
             "run_id": run_id,
             "answer": final.get("answer", ""),
             "citations": final.get("citations", []),
             "chart_spec": final.get("chart_spec"),
         }
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE agent_runs SET final_answer = %s, result_json = %s WHERE run_id = %s",
+                (result["answer"], json.dumps(result, default=str), run_id),
+            )
+        conn.commit()
+
+        return result
     finally:
         conn.close()
 
 
+def run_query(query: str) -> dict:
+    """Synchronous convenience wrapper (CLI, eval harness) -- creates and
+    executes a run in one call. For a UI that wants live progress, use
+    create_run() + execute_run() instead (see api/main.py's /query, /status).
+    """
+    run_id = create_run(query)
+    return execute_run(run_id, query)
+
+
 if __name__ == "__main__":
     import argparse
-    import json
 
     parser = argparse.ArgumentParser(description="Run a query through the full agent graph.")
     parser.add_argument("query")

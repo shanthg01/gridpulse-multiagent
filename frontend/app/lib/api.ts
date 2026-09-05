@@ -1,4 +1,9 @@
-import type { DocumentMeta, QueryResponse, TraceResponse } from "./types";
+import type {
+  DocumentMeta,
+  StatusResponse,
+  SubmitResponse,
+  TraceResponse,
+} from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -10,13 +15,20 @@ async function handle<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function postQuery(query: string): Promise<QueryResponse> {
+/** Kicks off a query, returns immediately with just {run_id} -- the graph
+ * runs in the background, poll getStatus(run_id) for progress. */
+export async function submitQuery(query: string): Promise<SubmitResponse> {
   const res = await fetch(`${API_URL}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query }),
   });
-  return handle<QueryResponse>(res);
+  return handle<SubmitResponse>(res);
+}
+
+export async function getStatus(runId: string): Promise<StatusResponse> {
+  const res = await fetch(`${API_URL}/status/${runId}`);
+  return handle<StatusResponse>(res);
 }
 
 export async function getTrace(runId: string): Promise<TraceResponse> {

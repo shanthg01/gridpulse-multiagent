@@ -1,6 +1,7 @@
 """FastAPI layer for GridPulse AI — see PLAN.md "API layer" / Phase 6.
 
-Thin wrapper around the existing agent pipeline (agents.graph.run_query) and
+Thin wrapper around the existing agent pipeline (agents.graph.create_run/
+execute_run) and
 Postgres tables (documents, agent_steps). Does not touch agents/, rag/, or
 ingestion/ internals -- only imports their public entry points.
 
@@ -15,12 +16,12 @@ from pathlib import Path
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from agents.graph import run_query
+from agents.graph import create_run, execute_run
 from ingestion.doc_corpus import DOC_MANIFEST
 
 load_dotenv(override=True)
@@ -55,10 +56,62 @@ class QueryRequest(BaseModel):
 
 
 @app.post("/query")
-def post_query(req: QueryRequest):
+def post_query(req: QueryRequest, background_tasks: BackgroundTasks):
+    """Kicks off the agent graph and returns immediately with just a run_id --
+    a full run takes ~15-30s, so the client polls GET /status/{run_id} for
+    live progress (router -> rag -> timeseries -> synthesis) rather than
+    blocking on this call. execute_run runs as a FastAPI background task,
+    which Starlette schedules onto its threadpool for a sync callable like
+    this one, so it doesn't block the event loop.
+    """
     if not req.query or not req.query.strip():
         raise HTTPException(status_code=400, detail="query must not be empty")
-    return run_query(req.query)
+    run_id = create_run(req.query)
+    background_tasks.add_task(execute_run, run_id, req.query)
+    return {"run_id": run_id}
+
+
+@app.get("/status/{run_id}")
+def get_status(run_id: str):
+    """Poll target for in-flight progress. `done` flips once result_json is
+    populated (see agents.graph.execute_run); `result` carries the final
+    {answer, citations, chart_spec} once done, else null. `steps` is the
+    same step rows as /trace/{run_id}, growing as the graph progresses --
+    the frontend derives its stage stepper (router/rag/timeseries/synthesis)
+    from which agent_name values have appeared so far, reading needs_rag/
+    needs_timeseries off the router step's `output` once it lands.
+    """
+    conn = _get_conn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT result_json FROM agent_runs WHERE run_id = %s",
+                (run_id,),
+            )
+            run_row = cur.fetchone()
+            if run_row is None:
+                raise HTTPException(status_code=404, detail=f"no run with id={run_id}")
+
+            cur.execute(
+                """
+                SELECT step_no, agent_name, tool_called, output,
+                       tokens_in, tokens_out, latency_ms, retrieval_score
+                FROM agent_steps
+                WHERE run_id = %s
+                ORDER BY step_no
+                """,
+                (run_id,),
+            )
+            steps = cur.fetchall()
+    finally:
+        conn.close()
+
+    return {
+        "run_id": run_id,
+        "done": run_row["result_json"] is not None,
+        "steps": steps,
+        "result": run_row["result_json"],
+    }
 
 
 @app.get("/trace/{run_id}")
