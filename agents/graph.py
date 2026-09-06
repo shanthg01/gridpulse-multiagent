@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import psycopg2
 from dotenv import load_dotenv
@@ -43,14 +43,13 @@ class GraphState(TypedDict, total=False):
     final: dict | None
     run_id: str
     step_no: int
-    conn: Any  # psycopg2 connection, carried through state for step logging
 
 
 def _node_router(state: GraphState) -> dict:
     decision, result = classify_query(state["query"])
     step_no = state["step_no"] + 1
     log_step(
-        state["conn"], state["run_id"], step_no, "router", "classify_query",
+        state["run_id"], step_no, "router", "classify_query",
         state["query"], decision,
         result.tokens_in, result.tokens_out, result.latency_ms,
     )
@@ -69,7 +68,7 @@ def _node_rag(state: GraphState) -> dict:
     step_no = state["step_no"] + 1
     llm = result.get("llm_result")
     log_step(
-        state["conn"], state["run_id"], step_no, "rag_agent", "hybrid_search",
+        state["run_id"], step_no, "rag_agent", "hybrid_search",
         {"query": state["query"], "iso": state.get("iso")},
         {"answer": result["answer"], "n_citations": len(result["citations"])},
         llm.tokens_in if llm else 0, llm.tokens_out if llm else 0, llm.latency_ms if llm else 0,
@@ -85,7 +84,7 @@ def _node_timeseries(state: GraphState) -> dict:
     step_no = state["step_no"] + 1
     llm = result.get("llm_result")
     log_step(
-        state["conn"], state["run_id"], step_no, "timeseries_agent", "eia_series_query",
+        state["run_id"], step_no, "timeseries_agent", "eia_series_query",
         {"query": state["query"]},
         {"answer": result["answer"], "params": result.get("params")},
         llm.tokens_in if llm else 0, llm.tokens_out if llm else 0, llm.latency_ms if llm else 0,
@@ -98,7 +97,7 @@ def _node_synthesis(state: GraphState) -> dict:
     step_no = state["step_no"] + 1
     llm = final.get("synthesis_llm_result")
     log_step(
-        state["conn"], state["run_id"], step_no, "synthesis_agent", None,
+        state["run_id"], step_no, "synthesis_agent", None,
         {"had_rag": bool(state.get("rag_result")), "had_timeseries": bool(state.get("ts_result"))},
         {"answer": final["answer"]},
         llm.tokens_in if llm else 0, llm.tokens_out if llm else 0, llm.latency_ms if llm else 0,
@@ -156,34 +155,33 @@ def execute_run(run_id: str, query: str) -> dict:
     result to agent_runs.result_json (this is what flips a poller's "done"
     check), and returns {run_id, answer, citations, chart_spec}.
     """
+    initial_state: GraphState = {
+        "query": query,
+        "run_id": run_id,
+        "step_no": 0,
+    }
+    final_state = _get_graph().invoke(initial_state)
+    final = final_state.get("final") or {}
+
+    result = {
+        "run_id": run_id,
+        "answer": final.get("answer", ""),
+        "citations": final.get("citations", []),
+        "chart_spec": final.get("chart_spec"),
+    }
+
     conn = psycopg2.connect(DATABASE_URL)
     try:
-        initial_state: GraphState = {
-            "query": query,
-            "run_id": run_id,
-            "step_no": 0,
-            "conn": conn,
-        }
-        final_state = _get_graph().invoke(initial_state)
-        final = final_state.get("final") or {}
-
-        result = {
-            "run_id": run_id,
-            "answer": final.get("answer", ""),
-            "citations": final.get("citations", []),
-            "chart_spec": final.get("chart_spec"),
-        }
-
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE agent_runs SET final_answer = %s, result_json = %s WHERE run_id = %s",
                 (result["answer"], json.dumps(result, default=str), run_id),
             )
         conn.commit()
-
-        return result
     finally:
         conn.close()
+
+    return result
 
 
 def run_query(query: str) -> dict:

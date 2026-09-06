@@ -11,9 +11,14 @@ from dataclasses import dataclass
 from typing import Any
 
 import anthropic
+import psycopg2
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
+
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgresql://gridpulse:gridpulse@localhost:5433/gridpulse"
+)
 
 # Cost/latency tiering per PLAN.md: Haiku for router/bulk work, Sonnet for
 # final synthesis and anything answering the user directly.
@@ -92,7 +97,6 @@ def call_claude(
 
 
 def log_step(
-    conn,
     run_id: str,
     step_no: int,
     agent_name: str,
@@ -104,18 +108,26 @@ def log_step(
     latency_ms: int = 0,
     retrieval_score: float | None = None,
 ) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO agent_steps
-                (run_id, step_no, agent_name, tool_called, input, output,
-                 tokens_in, tokens_out, latency_ms, retrieval_score)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                run_id, step_no, agent_name, tool_called,
-                json.dumps(input_, default=str), json.dumps(output, default=str),
-                tokens_in, tokens_out, latency_ms, retrieval_score,
-            ),
-        )
-    conn.commit()
+    # Opens its own connection (matching every other module's pattern) rather
+    # than taking a shared one -- log_step is called from graph nodes that
+    # may run concurrently (parallel branches), and psycopg2 connections
+    # aren't safe to share across threads.
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO agent_steps
+                    (run_id, step_no, agent_name, tool_called, input, output,
+                     tokens_in, tokens_out, latency_ms, retrieval_score)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    run_id, step_no, agent_name, tool_called,
+                    json.dumps(input_, default=str), json.dumps(output, default=str),
+                    tokens_in, tokens_out, latency_ms, retrieval_score,
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
